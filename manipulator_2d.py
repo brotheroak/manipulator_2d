@@ -8,6 +8,8 @@ import random
 
 from ou_noise import OUNoise
 
+
+
 class Transformation:
     """
     Transformation class for SE(2)
@@ -18,14 +20,14 @@ class Transformation:
             self._matrix = self.compute_matrix(translation, rotation)
         else:
             self._matrix = matrix.copy()
-
+    
     def __mul__(self, other):
         if isinstance(other, self.__class__):
             tmp = Transformation()
             tmp._matrix = np.matmul(self._matrix, other._matrix)
             return tmp
         elif isinstance(other, np.ndarray):
-            if other.shape == (2,):
+            if other.shape==(2,):
                 return np.matmul(self._matrix, np.concatenate((other, [1])))[:2]
             else:
                 return np.matmul(self._matrix, other)
@@ -33,7 +35,7 @@ class Transformation:
             return self._matrix * other
 
     def __str__(self):
-        return "Translation: %s\nRotation: %s\nTransfromation matrix:\n%s" % (
+        return "Translation: %s\nRotation: %s\nTransfromation matrix:\n%s"%(
             self.get_translation(), self.get_rotation(), self._matrix
         )
 
@@ -89,14 +91,15 @@ class Transformation:
         return np.array(
             [
                 [c, -s, translation[0]],
-                [s, c, translation[1]],
-                [0, 0, 1]
+                [s,  c, translation[1]],
+                [0,  0,              1]
             ]
         )
 
 
-class Manipulator2D(gym.Env):
 
+class Manipulator2D(gym.Env):
+    
     def __init__(self, arm1=1, arm2=1, dt=0.01, tol=0.1):
         self.env_boundary = 5
 
@@ -114,17 +117,25 @@ class Manipulator2D(gym.Env):
         self.action_low = np.array([0, -np.pi, -np.pi, -np.pi])
 
         # GYM environment에서 요구하는 변수로, 실제 observation space와 action space를 여기에서 구성한다.
-        self.observation_space = spaces.Box(low=self.obs_low, high=self.obs_high, dtype=np.float32)
-        self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float32)
+        self.observation_space = spaces.Box(low = self.obs_low, high = self.obs_high, dtype = np.float32)
+        self.action_space = spaces.Box(low = self.action_low, high = self.action_high, dtype = np.float32)
 
         # 로봇암의 요소를 결정하는 변수
-        self.link1_len = arm1  # 로봇팔 길이
+        self.link1_len = arm1 # 로봇팔 길이
         self.link2_len = arm2
-        self.dt = dt  # Timestep
-        self.tol = tol  # 목표까지 거리
+        self.dt = dt # Timestep
+        self.tol = tol # 목표까지 거리
 
         # 학습 환경에서 사용할 난수 생성에 필요한 seed를 지정한다.
         self.seed()
+
+        self.robot_tf = Transformation()
+        self.joint1_tf = Transformation()
+        self.link1_tf = Transformation(translation=(self.link1_len, 0))
+        self.joint2_tf = Transformation()
+        self.link2_tf = Transformation(translation=(self.link2_len, 0))
+        self.link1_tf_global = self.robot_tf * self.joint1_tf * self.link1_tf
+        self.link2_tf_global = self.link1_tf_global * self.joint2_tf * self.link2_tf
 
         self.target_speed = 1.2
 
@@ -140,8 +151,8 @@ class Manipulator2D(gym.Env):
         # Action으로부터 로봇암 kinematics를 계산하는 부분
         # 여기에서 action은 각 로봇팔1이 x축과 이루는 각의 변화, 로봇팔1과 로봇팔2이 이루는 각의 변화를 말함
         self.robot_tf.transform(
-            translation=(action[0] * self.dt, 0),
-            rotation=action[1] * self.dt
+            translation=(action[0]*self.dt, 0),
+            rotation=action[1]*self.dt
         )
 
         self.joint1_tf.transform(rotation=action[2] * self.dt)
@@ -170,22 +181,23 @@ class Manipulator2D(gym.Env):
             )
         )
 
-        # 일반적으로 Gym environment의 step function은
+        # 일반적으로 Gym environment의 step function은 
         # State(observation), 현재 step에서의 reward, episode 종료 여부, 기타 정보로 구성되어있음
         return self._get_state(), reward, done, info
+
 
     def reset(self):
         # 매 episode가 시작될때 사용됨.
         # 사용 변수들 초기화
 
         # 매 에피소드마다 로봇을 원점으로 이동시키려면 아래 주석을 해제한다.
-        self.robot_tf = Transformation()
-        self.joint1_tf = Transformation()
-        self.link1_tf = Transformation(translation=(self.link1_len, 0))
-        self.joint2_tf = Transformation()
-        self.link2_tf = Transformation(translation=(self.link2_len, 0))
-        self.link1_tf_global = self.robot_tf * self.joint1_tf * self.link1_tf
-        self.link2_tf_global = self.link1_tf_global * self.joint2_tf * self.link2_tf
+        # self.robot_tf = Transformation()
+        # self.joint1_tf = Transformation()
+        # self.link1_tf = Transformation(translation=(self.link1_len, 0))
+        # self.joint2_tf = Transformation()
+        # self.link2_tf = Transformation(translation=(self.link2_len, 0))
+        # self.link1_tf_global = self.robot_tf * self.joint1_tf * self.link1_tf
+        # self.link2_tf_global = self.link1_tf_global * self.joint2_tf * self.link2_tf
 
         # 목표 지점 생성
         self.target_tf = Transformation(
@@ -198,15 +210,16 @@ class Manipulator2D(gym.Env):
 
         self.done = False
         self.t = 0
-        self.buffer = []  # 시각화를 위한 버퍼. episode가 리셋될 때마다 초기화.
+        self.buffer = []    # 시각화를 위한 버퍼. episode가 리셋될 때마다 초기화.
 
         # Step 함수와 다르게 reset함수는 초기 state 값 만을 반환합니다.
         return self._get_state()
 
+
     def _move_target(self):
         self.target_tf.transform(
-            translation=(self.target_speed * self.dt, 0),
-            rotation=self.ou.evolve() * self.dt
+            translation = (self.target_speed * self.dt, 0),
+            rotation = self.ou.evolve() * self.dt
         )
         if self.target_tf.x() > self.env_boundary:
             self.target_tf.x(self.env_boundary)
@@ -217,6 +230,7 @@ class Manipulator2D(gym.Env):
         if self.target_tf.y() < -self.env_boundary:
             self.target_tf.y(-self.env_boundary)
 
+
     def _get_reward(self):
         # 해당 step의 reward를 계산합니다.
         done = False
@@ -225,13 +239,13 @@ class Manipulator2D(gym.Env):
             self.target_tf.get_translation() - self.link2_tf_global.get_translation()
         )
         # 목표점을 반지름 sqrt(self.tol)인 원으로 설정
-        if l < self.tol:
-            reward = 1.
+        if l < self.tol: 
+            reward = 10.
             # 목표 근처에 도달하면 episode 종료를 알립니다.
-            done = True
+            done = True 
         else:
             # 아직 목표 근처에 도달하지 않았을 때는 목표에 가까워질수록 리워드가 커지게 설정
-            reward = -l ** 2
+            reward = -l**2
 
         x0, y0 = self.robot_tf.get_translation()
         if abs(x0) > self.env_boundary:
@@ -245,31 +259,46 @@ class Manipulator2D(gym.Env):
 
         return reward, done
 
+    
     def _get_state(self):
         # State(Observation)를 반환합니다.
+        # return np.concatenate(
+        #     [
+        #         tf.get_translation() for tf in [
+        #             self.robot_tf,
+        #             self.link1_tf_global,
+        #             self.link2_tf_global,
+        #             self.target_tf
+        #         ]
+        #     ]
+        # )
+        link2_to_target = self.link2_tf_global.inv() * self.target_tf.get_translation()
+        err1 = self.link2_tf * link2_to_target
+        err2 = self.link1_tf * self.joint2_tf * err1
+        err3 = self.joint1_tf * err2
+
         return np.concatenate(
             [
-                tf.get_translation() for tf in [
-                self.robot_tf,
-                self.link1_tf_global,
-                self.link2_tf_global,
-                self.target_tf
-            ]
+                link2_to_target,
+                err1,
+                err2,
+                err3
             ]
         )
 
-    def seed(self, seed=None):
+    def seed(self, seed = None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
+    
     def render(self):
         # Episode 동안의 로봇암 trajectory plot
         buffer = np.array(self.buffer)
-
+        
         # set up figure and animation
         fig = plt.figure()
         ax = fig.add_subplot(111, aspect='equal', autoscale_on=False,
-                             xlim=(-self.env_boundary, self.env_boundary), ylim=(-self.env_boundary, self.env_boundary))
+                            xlim=(-self.env_boundary, self.env_boundary), ylim=(-self.env_boundary, self.env_boundary))
         ax.grid()
 
         robot, = ax.plot([], [], 'g', lw=2)
@@ -283,22 +312,22 @@ class Manipulator2D(gym.Env):
         robot_geom = np.array(
             [
                 [0.3, -0.2, -0.2, 0.3],
-                [0, 0.2, -0.2, 0],
-                [1, 1, 1, 1]
+                [  0,  0.2, -0.2,   0],
+                [  1,    1,    1,   1]
             ]
         )
         link2_geom = np.array(
             [
                 [-self.link2_len, -0.1],
-                [0, 0],
-                [1, 1]
+                [              0,    0],
+                [              1,    1]
             ]
         )
         gripper_geom = np.array(
             [
-                [0.1, -0.1, -0.1, 0.1],
-                [0.1, 0.1, -0.1, -0.1],
-                [1, 1, 1, 1]
+                [0.1, -0.1, -0.1,  0.1],
+                [0.1,  0.1, -0.1, -0.1],
+                [   1,    1,   1,    1]
             ]
         )
 
@@ -333,9 +362,10 @@ class Manipulator2D(gym.Env):
 
         interval = self.dt * 1000
         ani = animation.FuncAnimation(fig, animate, frames=len(self.buffer),
-                                      interval=interval, blit=True, init_func=init)
+                                        interval=interval, blit=True, init_func=init)
 
         plt.show()
+
 
 
 def test(env):
@@ -362,7 +392,7 @@ def test(env):
             np.arctan2(err1[1], err1[0])
         ]
 
-        # Environment의 step 함수를 호출하고,
+        # Environment의 step 함수를 호출하고, 
         # 변화된 state(observation)과 reward, episode 종료여부, 기타 정보를 가져옴
         next_state, reward, done, info = env.step(action)
 
@@ -374,5 +404,6 @@ def test(env):
     env.render()
 
 
-if __name__ == '__main__':
+if __name__=='__main__':
+
     test(Manipulator2D(tol=0.01))
