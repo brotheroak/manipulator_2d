@@ -189,15 +189,21 @@ class Manipulator2D(gym.Env):
     def reset(self):
         # 매 episode가 시작될때 사용됨.
         # 사용 변수들 초기화
+        self.pre_state = np.array([
+            0,
+            0,
+            0,
+            0,
+        ])
 
         # 매 에피소드마다 로봇을 원점으로 이동시키려면 아래 주석을 해제한다.
-        # self.robot_tf = Transformation()
-        # self.joint1_tf = Transformation()
-        # self.link1_tf = Transformation(translation=(self.link1_len, 0))
-        # self.joint2_tf = Transformation()
-        # self.link2_tf = Transformation(translation=(self.link2_len, 0))
-        # self.link1_tf_global = self.robot_tf * self.joint1_tf * self.link1_tf
-        # self.link2_tf_global = self.link1_tf_global * self.joint2_tf * self.link2_tf
+        self.robot_tf = Transformation()
+        self.joint1_tf = Transformation()
+        self.link1_tf = Transformation(translation=(self.link1_len, 0))
+        self.joint2_tf = Transformation()
+        self.link2_tf = Transformation(translation=(self.link2_len, 0))
+        self.link1_tf_global = self.robot_tf * self.joint1_tf * self.link1_tf
+        self.link2_tf_global = self.link1_tf_global * self.joint2_tf * self.link2_tf
 
         # 목표 지점 생성
         self.target_tf = Transformation(
@@ -241,6 +247,7 @@ class Manipulator2D(gym.Env):
         # 목표점을 반지름 sqrt(self.tol)인 원으로 설정
         if l < self.tol: 
             reward = 10.
+            print("Robot이 Target을 잡음.")
             # 목표 근처에 도달하면 episode 종료를 알립니다.
             done = True 
         else:
@@ -249,11 +256,11 @@ class Manipulator2D(gym.Env):
 
         x0, y0 = self.robot_tf.get_translation()
         if abs(x0) > self.env_boundary:
-            print("Robot이 Boundary를 벗어남.")
+            # print("Robot이 Boundary를 벗어남.")
             done = True
             reward = -100
         elif abs(y0) > self.env_boundary:
-            print("Robot이 Boundary를 벗어남.")
+            # print("Robot이 Boundary를 벗어남.")
             done = True
             reward = -100
 
@@ -277,14 +284,25 @@ class Manipulator2D(gym.Env):
         err2 = self.link1_tf * self.joint2_tf * err1
         err3 = self.joint1_tf * err2
 
-        return np.concatenate(
-            [
-                link2_to_target,
-                err1,
-                err2,
-                err3
-            ]
-        )
+        err = np.array([
+            np.linalg.norm(err3) / 5,
+            np.arctan2(err3[1], err3[0]) / np.pi,
+            np.arctan2(err2[1], err2[0]) / np.pi,
+            np.arctan2(err1[1], err1[0]) / np.pi,
+        ])
+
+        res = np.concatenate([err, self.pre_state])
+        self.pre_state = err
+        return res
+        #
+        # return np.concatenate(
+        #     [
+        #         link2_to_target,
+        #         err1,
+        #         err2,
+        #         err3
+        #     ]
+        # )
 
     def seed(self, seed = None):
         self.np_random, seed = seeding.np_random(seed)
@@ -406,4 +424,4 @@ def test(env):
 
 if __name__=='__main__':
 
-    test(Manipulator2D(tol=0.01))
+    test(Manipulator2D(tol=0.05))
